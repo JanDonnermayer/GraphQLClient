@@ -10,9 +10,9 @@ type DataPayload =
     { data: string }
 
 type Payload =
-    | M of MessagePayload
     | D of DataPayload
     | Q of QueryPayload
+    | M of MessagePayload
 
 type HasuraMessage =
     { ``type``: Option<string>

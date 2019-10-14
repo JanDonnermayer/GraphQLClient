@@ -15,6 +15,6 @@ type Payload =
     | Q of QueryPayload
 
 type HasuraMessage =
-    { ``type``: string
-      id: string
-      payload: Payload }
+    { ``type``: Option<string>
+      id: Option<string>
+      payload: Option<Payload> }

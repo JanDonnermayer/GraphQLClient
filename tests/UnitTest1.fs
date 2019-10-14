@@ -30,10 +30,7 @@ let Test1() =
         | _ -> None
 
     let tryStringProp (e: JsonElement) (name: string) =
-        e.TryGetProperty name
-        |> function
-        | (true, _e) -> tryString _e
-        | _ -> None
+        tryProp (e) (name) |> function | Some p -> tryString p | _ -> None
 
     let tryDataPayload (e: JsonElement) =
         match e.ValueKind with

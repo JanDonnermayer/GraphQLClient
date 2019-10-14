@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.26124.0
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "GraphQLClient", "src\GraphQLClient.fsproj", "{D00D4DAC-CB7E-4E47-8E54-4D4F0C4DDBE6}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "tests", "tests\tests.fsproj", "{10E31D7A-3A8A-4828-8AA3-D8D0D0E1399F}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "GraphQlClient.Tests", "tests\GraphQlClient.Tests.fsproj", "{10E31D7A-3A8A-4828-8AA3-D8D0D0E1399F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

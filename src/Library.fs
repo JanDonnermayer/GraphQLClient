@@ -11,10 +11,10 @@ module Model =
 
     type HasuraSchema = JsonProvider<"""
     [
-        { "type" : "ka", "payload" : { "data" : "lel" },  "id" : "as0" },
-        { "type" : "ka", "payload" : { "query" : ""   }},
+        { "type" : "ka", "id" : "as0", "payload" : { "data" : "lel" }  },
+        { "type" : "ka", "payload" : { "query" : "{ Super_GaphQLData } }" }  },
         { "type" : "ka", "payload" : "Couldnt connect" },
-        { "type" : "ka"}
+        { "type" : "ka" }
     ]""">
 
     type MessagePayload = string

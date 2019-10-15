@@ -3,24 +3,32 @@ module GraphQlClient.Tests
 open NUnit.Framework
 open GraphQLClient
 open System.Text.Json
-
+open FSharp.Data
+open System
+open GraphQLClient.Model
 
 [<SetUp>]
 let Setup() = ()
+    
 
 [<Test>]
 let Test1() =
-
-    let json1 = """{ "type" : "ka", "id" : "0", "payload" : { "data" : "lel" }  }"""
-    let json2 = """{ "type" : "ka", "payload" : "XBuben" }"""
-
-    use jsonDoc1 = JsonDocument.Parse(json1)
-    use jsonDoc2 = JsonDocument.Parse(json2)
 
     let (=>>) f1 f2 =
         match f1 with
         | Some v -> f2 v
         | _ -> None
+
+    let (==>) = Option.map
+
+
+    let json1 = """{ "type" : "ka", "id" : "0", "payload" : { "data" : "lel" }  }"""
+
+    let json2 = """{ "type" : "ka", "payload" : "XBuben" }"""
+
+    use jsonDoc1 = JsonDocument.Parse(json1)
+    use jsonDoc2 = JsonDocument.Parse(json2)
+
 
     let _tryProp (name: string) (o: JsonElement) =
         match o.TryGetProperty name with
@@ -44,7 +52,7 @@ let Test1() =
     let tryQueryPayload (e: JsonElement) = tryStringProp e "query" =>> (fun s -> Some { query = s })
 
     let tryDataPayload (e: JsonElement) = tryStringProp e "data" =>> (fun s -> Some { data = s })
-    
+
     let tryMessagePayload (e: JsonElement) = tryString e
 
     let tryPayload (e: JsonElement) =
@@ -58,7 +66,7 @@ let Test1() =
         match e.ValueKind with
         | JsonValueKind.Object ->
             Some
-                { ``type`` = tryStringProp e "type"
+                { ``type`` = (tryStringProp e "type").Value
                   id = tryStringProp e "id"
                   payload = tryProp e "payload" =>> tryPayload }
         | _ -> None

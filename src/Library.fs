@@ -13,9 +13,9 @@ module Model =
     type HasuraSchema = JsonProvider<"""
     [
         { "type" : "ka", "id" : "as0", "payload" : { "data" : "lel" }  },
+        { "type" : "ka", "id" : "bsas" },    
         { "type" : "ka", "payload" : { "query" : "{ Super_GaphQLData } }" }  },
-        { "type" : "ka", "payload" : "Couldnt connect" },
-        { "type" : "ka" }
+        { "type" : "ka", "payload" : "Couldnt connect" }
     ]""">
 
     type MessagePayload = string
@@ -37,19 +37,21 @@ module Model =
           payload: Option<Payload> }
 
         static member ConAck =
-            { ``type`` = "conection_ack"
+            { ``type`` = "connection_ack"
               id = None
               payload = None }
 
         static member ConInit =
-            { ``type`` = "conection_init"
+            { ``type`` = "connection_init"
               id = None
               payload = None }
 
         static member Start query id =
             { ``type`` = "start"
               id = Some id
-              payload = Some(Q { query = query }) }
+              payload = Some(Q { query = query }) }   
+
+    let tryValue v = match v with null -> None | _ -> Some v
 
     let getPayload (e: HasuraSchema.StringOrPayload) =
         match (e.Record, e.String) with
@@ -62,12 +64,12 @@ module Model =
         | _ -> None
 
     let getHasuraMessage json =
-        HasuraSchema.Parse json
+        HasuraSchema.Parse <| "[" + json  + "]"
         |> Array.head
         |> (fun e ->
         { ``type`` = e.Type
           id = e.Id
-          payload = getPayload e.Payload })
+          payload = e.Payload |> getPayload })
 
     let getRoot (m: HasuraMessage) =
         HasuraSchema.Root
@@ -81,7 +83,7 @@ module Model =
               | _ -> HasuraSchema.StringOrPayload()))
 
 
-    let getJson (m: HasuraMessage) = (m |> getRoot).JsonValue.ToString JsonSaveOptions.None
+    let getJson (m: HasuraMessage) = (m |> getRoot).JsonValue.ToString JsonSaveOptions.DisableFormatting
 
 
 open Model
@@ -90,24 +92,23 @@ open System.Threading.Tasks
 open System.Net.WebSockets
 
 module Clients =
-    type WebSocketClient private (clientFactory: unit -> ClientWebSocket) =
+    type WebSocketClient private (client : ClientWebSocket) =
         let receiver = new Subject<byte []>()
         let sender = new Subject<byte []>()
-        let client = clientFactory()
-
-        let subscribeReceiver() =
+  
+        let subscribeReceiver =
             let cts = new CancellationTokenSource()
             let receive =
                 async {
                     while true do
-                        let buffer = ArraySegment<byte>(Array.zeroCreate 8192)
+                        let buffer = new ArraySegment<byte>(Array.zeroCreate<byte> 8192)
                         let! _ = Async.AwaitTask(client.ReceiveAsync(buffer, cts.Token))
-                        receiver.OnNext(buffer.Array)
+                        receiver.OnNext(buffer.Array |> Array.takeWhile (fun e -> e <> (byte)0))
                 }
             Async.Start(receive, cts.Token)
             cts :> IDisposable
 
-        let senderSubscribe() =
+        let senderSubscribe =
             let sendAsync m =
                 client.SendAsync(new ArraySegment<byte>(m), WebSocketMessageType.Text, true, CancellationToken.None)
                       .ConfigureAwait(false) |> ignore
@@ -115,8 +116,8 @@ module Clients =
 
         let disposables: IDisposable list =
             [ client :> IDisposable
-              subscribeReceiver()
-              senderSubscribe() ]
+              subscribeReceiver
+              senderSubscribe ]
 
         member public __.Receiver = receiver.AsObservable()
         member public __.Sender = sender.AsObserver()
@@ -128,19 +129,18 @@ module Clients =
             let client = new ClientWebSocket()
             client.Options.AddSubProtocol protocol |> ignore
             async {
-                Async.AwaitTask(client.ConnectAsync(Uri(url), ct)) |> ignore
-                return new WebSocketClient(fun _ -> client)
+                do! Async.AwaitTask(client.ConnectAsync(Uri(url), ct)) 
+                return new WebSocketClient(client)
             }
 
 
-    type HasuraWebSocketClient private (clientFactory: unit -> WebSocketClient) =
+    type HasuraWebSocketClient private (client: WebSocketClient) =
         let byteToMsg b = Encoding.UTF8.GetString b |> getHasuraMessage
         let msgToByte m = getJson m |> Encoding.UTF8.GetBytes
 
         let sender = new Subject<HasuraMessage>()
         let receiver = new Subject<HasuraMessage>()
-        let client = clientFactory()
-
+     
         let subscribeReceiver = client.Receiver.Select(byteToMsg).Subscribe(receiver)
         let senderSubscribe = sender.Select(msgToByte).Subscribe(client.Sender)
 
@@ -164,14 +164,14 @@ module Clients =
                 __.Sender.OnNext(HasuraMessage.ConInit)
 
                 let! res = Async.AwaitTask(Task.WhenAny(cts.Task, Task.Delay(-1, ct)))
-                return if (res.Id = cts.Task.Id) then Ok client
+                return if (res.Id = cts.Task.Id) then Ok __
                        else Error "Didn't receive the connection-acknowledged message!"
             }
 
         static member public ConnectAsync (url: string) (ct: CancellationToken) =
             async {
                 let! innerClient = WebSocketClient.ConnectAsync url "graphql-ws" ct
-                let client = new HasuraWebSocketClient(fun _ -> innerClient)
+                let client = new HasuraWebSocketClient(innerClient)
                 return! client.HandshakeAsync ct
             }
    

@@ -4,6 +4,7 @@ open NUnit.Framework
 open GraphQLClient
 open System.Text.Json
 open FSharp.Data
+open FSharp.Core
 open System
 open GraphQLClient.Model
 open GraphQLClient.Clients
@@ -12,22 +13,16 @@ open System.Threading
 open System.Reactive
 open System.Reactive.Linq
 
+
+type s = {
+    kind : string
+    name : Option<string>
+}
+
 [<SetUp>]
 let Setup() = ()
     
 
-[<Test>]
-let assertMappings() =
-    let json = """{ "type" : "ka" }"""
-    //let json = """{ "type" : "Hello", "id" : "Xbuben", "payload" : { "query" : "lel"} }"""
-    let msg = getHasuraMessage json
-    
-    Assert.AreEqual("ka", msg.``type``)
-    Assert.AreEqual(None, msg.id)
-
-    let roundJson = getJson msg
-    //Assert.AreEqual(json, roundJson)
-    Assert.Pass()
 
 [<Test>]
 let Test1() =
@@ -48,14 +43,16 @@ let Test1() =
 
 
 
-    let msg = HasuraMessage.Start "1" query
+    let msg = HasuraMessage.Start "1" query 
+
+    TestContext.Progress.WriteLine(getJson msg)
 
     let tcs = new TaskCompletionSource<HasuraMessage>(TimeSpan.FromSeconds(20.0));
     let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0));
     
     async {
         let! resClient = HasuraWebSocketClient.ConnectAsync "ws://localhost:8080/v1/graphql" cts.Token         
-        let client = match resClient with | Ok r -> r |Error e -> failwith(e)
+        use client = match resClient with | Ok r -> r |Error e -> failwith(e)
 
         use sub =
             client.Receiver

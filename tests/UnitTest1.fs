@@ -6,10 +6,12 @@ open System.Text.Json
 open FSharp.Data
 open FSharp.Core
 open System
-open GraphQLClient.Model
+open GraphQLClient.Models.Hasura
+open GraphQLClient.Models.GraphQl
 open GraphQLClient.Clients
 open System.Threading.Tasks
 open System.Threading
+
 open System.Reactive
 open System.Reactive.Linq
 
@@ -23,22 +25,27 @@ type s = {
 let Setup() = ()
     
 
+[<Test>]
+let Test2() =
+    let res = Requests.testRun()
+    Assert.IsNotNull res 
+
 
 [<Test>]
 let Test1() =
 
     let query =
             """{
-                arrk_task_tracker_module {
-                    id
-                    name
-                    module_workers {
+            arrk_task_tracker_module {
+                id
+                name
+                module_workers {    
                     worker {
                         id
                         name
                     }
                 }
-            }
+            }        
         }"""
 
 

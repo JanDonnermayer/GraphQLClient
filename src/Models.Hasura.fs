@@ -1,50 +1,51 @@
-namespace GraphQLClient
+namespace GraphQLClient.Models.Hasura
 
 open FSharp.Data
 
-module Model =
+type HasuraSchema = JsonProvider<"""
+[
+    { "type" : "ka", "id" : "as0", "payload" : { "data" : { } }  },
+    { "type" : "ka", "id" : "" },    
+    { "type" : "ka" },    
+    { "type" : "ka", "payload" : { "query" : "{ Super_GaphQLData } }" }  },
+    { "type" : "ka", "payload" : "Couldnt connect" }
+]""">
 
-    type HasuraSchema = JsonProvider<"""
-    [
-        { "type" : "ka", "id" : "as0", "payload" : { "data" : { } }  },
-        { "type" : "ka", "id" : "" },    
-        { "type" : "ka" },    
-        { "type" : "ka", "payload" : { "query" : "{ Super_GaphQLData } }" }  },
-        { "type" : "ka", "payload" : "Couldnt connect" }
-    ]""">
+type MessagePayload = string
 
-    type MessagePayload = string
+type QueryPayload =
+    { query: string }
 
-    type QueryPayload =
-        { query: string }
+type DataPayload =
+    { data: HasuraSchema.Data }
 
-    type DataPayload =
-        { data: HasuraSchema.Data }
+type Payload =
+    | D of DataPayload
+    | Q of QueryPayload
+    | M of MessagePayload
 
-    type Payload =
-        | D of DataPayload
-        | Q of QueryPayload
-        | M of MessagePayload
+type HasuraMessage =
+    { kind: string
+      id: Option<string>
+      payload: Option<Payload> }
 
-    type HasuraMessage =
-        { kind: string
-          id: Option<string>
-          payload: Option<Payload> }
+    static member ConAck =
+        { kind = "connection_ack"
+          id = None
+          payload = None }
 
-        static member ConAck =
-            { kind = "connection_ack"
-              id = None
-              payload = None }
+    static member ConInit =
+        { kind = "connection_init"
+          id = None
+          payload = None }
 
-        static member ConInit =
-            { kind = "connection_init"
-              id = None
-              payload = None }
+    static member Start id query =
+        { kind = "start"
+          id = Some id
+          payload = Some(Q { query = query }) }   
 
-        static member Start id query =
-            { kind = "start"
-              id = Some id
-              payload = Some(Q { query = query }) }   
+[<AutoOpenAttribute>]
+module Conversion =
 
     let tryValue v = match v with null -> None | _ -> Some v
 

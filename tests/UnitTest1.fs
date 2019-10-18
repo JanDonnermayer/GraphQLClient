@@ -25,28 +25,22 @@ type s = {
 let Setup() = ()
     
 
-[<Test>]
-let Test2() =
-    let res = Requests.testRun()
-    Assert.IsNotNull res 
-
 
 [<Test>]
 let Test1() =
 
-    let query =
-            """{
-            arrk_task_tracker_module {
-                id
-                name
-                module_workers {    
-                    worker {
-                        id
-                        name
-                    }
+    let query = """{
+        arrk_task_tracker_module {
+            id
+            name
+            module_workers {    
+                worker {
+                    id
+                    name
                 }
-            }        
-        }"""
+            }
+        }        
+    }"""
 
 
 
@@ -56,15 +50,27 @@ let Test1() =
 
     let tcs = new TaskCompletionSource<HasuraMessage>(TimeSpan.FromSeconds(20.0));
     let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0));
+
+    let parseData m =
+        match m.payload with
+        | Some p ->
+            (match p with 
+            | D d -> Some (d.data.JsonValue.ToString (JsonSaveOptions.None) |> getArrkModules )
+            | _ -> None )
+        | None -> None
+
     
     async {
         let! resClient = HasuraWebSocketClient.ConnectAsync "ws://localhost:8080/v1/graphql" cts.Token         
         use client = match resClient with | Ok r -> r |Error e -> failwith(e)
 
-        use sub =
+        use _ =
             client.Receiver
+                .Do(parseData >> TestContext.Progress.WriteLine)
                 .Do(getJson >> TestContext.Progress.WriteLine)
-                .Subscribe(tcs.TrySetResult >> ignore);
+                .Subscribe(
+                    tcs.TrySetResult >> ignore,
+                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
 
         client.Sender.OnNext(msg);
 

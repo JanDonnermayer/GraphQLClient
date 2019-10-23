@@ -14,7 +14,7 @@ open GraphQLClient.Models.Hasura
 
 
 
-type WebSocketClient private (client: ClientWebSocket) =
+type internal WebSocketClient private (client: ClientWebSocket) =
     let receiver = new Subject<byte []>()
     let sender = new Subject<byte []>()
 
@@ -118,7 +118,7 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             let! innerClient = WebSocketClient.ConnectAsync url "graphql-ws" ct
             let client = new HasuraWebSocketClient(innerClient)
             return! client.HandshakeAsync ct
-        }
+        } 
 
 
 

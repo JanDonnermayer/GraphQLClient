@@ -27,7 +27,8 @@ let Setup() = ()
 
 
 [<Test>]
-let Test1() =
+let ```Connect to Hasura and try test query``() =
+
 
     let query = """{
         arrk_task_tracker_module {
@@ -69,7 +70,8 @@ let Test1() =
                 .Do(parseData >> TestContext.Progress.WriteLine)
                 .Do(getJson >> TestContext.Progress.WriteLine)
                 .Subscribe(
-                    tcs.TrySetResult >> ignore,
+                    ignore,
+                    //tcs.TrySetResult >> ignore,
                     (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
 
         client.Sender.OnNext(msg);

@@ -4,24 +4,29 @@ open System
 open System.Reactive
 open System.Reactive.Linq
 open System.Reactive.Subjects
+open System.Reactive.Disposables
 open System.Threading
 open System.Text
 open System.Threading.Tasks
 open System.Net.WebSockets
 open GraphQLClient.Models.Hasura
 
-type WebSocketClient private (client : ClientWebSocket) =
+
+
+
+type WebSocketClient private (client: ClientWebSocket) =
     let receiver = new Subject<byte []>()
     let sender = new Subject<byte []>()
 
     let subscribeReceiver =
         let cts = new CancellationTokenSource()
+
         let receive =
             async {
                 while true do
                     let buffer = new ArraySegment<byte>(Array.zeroCreate<byte> 8192)
                     let! _ = Async.AwaitTask(client.ReceiveAsync(buffer, cts.Token))
-                    receiver.OnNext(buffer.Array |> Array.takeWhile (fun e -> e <> (byte)0))
+                    receiver.OnNext(buffer.Array |> Array.takeWhile (fun e -> e <> (byte) 0))
             }
         Async.Start(receive, cts.Token)
         cts :> IDisposable
@@ -47,7 +52,7 @@ type WebSocketClient private (client : ClientWebSocket) =
         let client = new ClientWebSocket()
         client.Options.AddSubProtocol protocol |> ignore
         async {
-            do! Async.AwaitTask(client.ConnectAsync(Uri(url), ct)) 
+            do! Async.AwaitTask(client.ConnectAsync(Uri(url), ct))
             return new WebSocketClient(client)
         }
 
@@ -55,11 +60,14 @@ type WebSocketClient private (client : ClientWebSocket) =
 type HasuraWebSocketClient private (client: WebSocketClient) =
     let byteToMsg b = Encoding.UTF8.GetString b |> getHasuraMessage
     let msgToByte m = getJson m |> Encoding.UTF8.GetBytes
+    let isEmpty m = m = HasuraMessage.Empty
+    let isConAck m = m = HasuraMessage.ConAck
 
     let sender = new Subject<HasuraMessage>()
     let receiver = new Subject<HasuraMessage>()
- 
-    let subscribeReceiver = client.Receiver.Select(byteToMsg).Subscribe(receiver)
+
+    let subscribeReceiver =
+        client.Receiver.Select(byteToMsg).Where(isEmpty >> not).Subscribe(receiver)
     let senderSubscribe = sender.Select(msgToByte).Subscribe(client.Sender)
 
     let disposables =
@@ -78,13 +86,32 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             let cts = TaskCompletionSource<HasuraMessage>()
 
             //Await the connection-acknowledged message
-            use _ = __.Receiver.FirstAsync((fun m -> m.Equals(HasuraMessage.ConAck))).Subscribe(cts.SetResult)
+            use _ = __.Receiver.Where(isConAck).Subscribe(cts.SetResult)
             __.Sender.OnNext(HasuraMessage.ConInit)
 
             let! res = Async.AwaitTask(Task.WhenAny(cts.Task, Task.Delay(-1, ct)))
             return if (res.Id = cts.Task.Id) then Ok __
                    else Error "Didn't receive the connection-acknowledged message!"
-        }
+        }              
+
+    member public __.Subscribe (query: string) =        
+        Observable.Create(fun observer ->
+            let id = Guid.NewGuid().ToString()
+            let msg = HasuraMessage.Start (id) (String.concat "" ["subscription {";  query; "}"])   
+            let d = new CompositeDisposable(
+                        seq {                 
+                            __.Receiver //filter string messages based on id
+                                .Where(fun s -> s.id.IsSome && s.id.Value = id)               
+                                .Select(stringDataPayload)
+                                .Where(Option.isSome)
+                                .Select(fun o -> o.Value)
+                                .Replay(1)
+                                .RefCount()
+                                .Subscribe observer;
+                            Disposable.Create(fun () -> __.Sender.OnNext(HasuraMessage.Stop id));
+                        }) :> IDisposable             
+            __.Sender.OnNext msg //send after subscribe
+            d)
 
     static member public ConnectAsync (url: string) (ct: CancellationToken) =
         async {
@@ -92,4 +119,7 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             let client = new HasuraWebSocketClient(innerClient)
             return! client.HandshakeAsync ct
         }
+
+
+
 

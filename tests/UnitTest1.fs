@@ -25,27 +25,28 @@ type s = {
 let Setup() = ()
     
 
+let getClient =
+    let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0));
+    async {
+        let! resClient = HasuraWebSocketClient.ConnectAsync "ws://localhost:8080/v1/graphql" cts.Token         
+        return match resClient with | Ok r -> r |Error e -> failwith(e)
+    }
+
+
 
 [<Test>]
-let ```Connect to Hasura and try test query``() =
+let ``Connect to Hasura and subscribe manually``() =
 
 
-    let query = """{
-        arrk_task_tracker_module {
+    let subscription = """
+        subscription {
+        module {
             id
-            name
-            module_workers {    
-                worker {
-                    id
-                    name
-                }
-            }
-        }        
-    }"""
+        }             
+      }
+    """
 
-
-
-    let msg = HasuraMessage.Start "1" query 
+    let msg = HasuraMessage.Start "1" subscription 
 
     TestContext.Progress.WriteLine(getJson msg)
 
@@ -62,16 +63,15 @@ let ```Connect to Hasura and try test query``() =
 
     
     async {
-        let! resClient = HasuraWebSocketClient.ConnectAsync "ws://localhost:8080/v1/graphql" cts.Token         
-        use client = match resClient with | Ok r -> r |Error e -> failwith(e)
+        use! client = getClient
 
         use _ =
             client.Receiver
                 .Do(parseData >> TestContext.Progress.WriteLine)
                 .Do(getJson >> TestContext.Progress.WriteLine)
+                .Where(parseData >> (fun d -> d.IsSome))
                 .Subscribe(
-                    ignore,
-                    //tcs.TrySetResult >> ignore,
+                    tcs.TrySetResult >> ignore, //set the query result
                     (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
 
         client.Sender.OnNext(msg);
@@ -81,4 +81,25 @@ let ```Connect to Hasura and try test query``() =
         Assert.IsNotNull(res);
     } |> Async.RunSynchronously |> ignore
     
+
+[<Test>]
+let ``Connect to Hasura and subscribe using Subscribe method``() =
+
+    let query = """ worker { name } """
+
+    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0));
+
+    async {
+        use! client = getClient
+
+        use _ =
+            (client.Subscribe query)
+                .Do(fun s -> TestContext.Progress.WriteLine(s))
+                .Subscribe(
+                    tcs.TrySetResult >> ignore, //set the query result
+                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
+
+        let! res = Async.AwaitTask tcs.Task        
+        Assert.IsNotEmpty(res)        
+    } |> Async.RunSynchronously |> ignore
 

@@ -94,10 +94,11 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
                    else Error "Didn't receive the connection-acknowledged message!"
         }              
 
+    // Get an IObservable<string> emitting results for specified query
     member public __.Subscribe (query: string) =        
         Observable.Create(fun observer ->
             let id = Guid.NewGuid().ToString()
-            let msg = HasuraMessage.Start (id) (String.concat "" ["subscription {";  query; "}"])   
+            let msg = HasuraMessage.Start (id) ("subscription {" + query + "}")   
             let d = new CompositeDisposable(
                         seq {                 
                             __.Receiver //filter string messages based on id

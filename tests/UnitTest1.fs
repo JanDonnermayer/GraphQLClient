@@ -25,10 +25,10 @@ type s = {
 let Setup() = ()
     
 
-let getClient =
+let getClient url =
     let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0));
     async {
-        let! resClient = HasuraWebSocketClient.ConnectAsync "ws://localhost:8080/v1/graphql" cts.Token         
+        let! resClient = HasuraWebSocketClient.ConnectAsync url cts.Token         
         return match resClient with | Ok r -> r |Error e -> failwith(e)
     }
 
@@ -43,7 +43,7 @@ let ``Connect to Hasura and subscribe using Subscribe method``() =
     let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0));
 
     async {
-        use! client = getClient
+        use! client = getClient "ws://localhost:8080/v1/graphql"
 
         use _ =
             (client.Subscribe query) // <-- this is the important part

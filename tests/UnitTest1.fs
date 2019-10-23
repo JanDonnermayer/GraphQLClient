@@ -93,7 +93,7 @@ let ``Connect to Hasura and subscribe using Subscribe method``() =
         use! client = getClient
 
         use _ =
-            (client.Subscribe query)
+            (client.Subscribe query) // <-- this is the important part
                 .Do(fun s -> TestContext.Progress.WriteLine(s))
                 .Subscribe(
                     tcs.TrySetResult >> ignore, //set the query result
@@ -103,3 +103,23 @@ let ``Connect to Hasura and subscribe using Subscribe method``() =
         Assert.IsNotEmpty(res)        
     } |> Async.RunSynchronously |> ignore
 
+[<Test>]
+let ``Connect to Hasura and subscribe using Subscribe method and wait``() =
+    
+    let query = """ worker { name } """
+
+    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0));
+
+    async {
+        use! client = getClient
+
+        use _ =
+            (client.Subscribe query) // <-- this is the important part
+                .Do(fun s -> TestContext.Progress.WriteLine(s))
+                .Subscribe(
+                    ignore, //set the query result
+                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
+
+        let! res = Async.AwaitTask tcs.Task        
+        Assert.IsNotEmpty(res)        
+    } |> Async.RunSynchronously |> ignore

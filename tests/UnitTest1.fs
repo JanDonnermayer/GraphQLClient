@@ -15,7 +15,6 @@ open System.Threading
 open System.Reactive
 open System.Reactive.Linq
 open System.Reactive.Concurrency
-open System.Collections.Immutable
 
 
 
@@ -66,7 +65,7 @@ let ``Connect to Hasura and subscribe very often``() =
     let incrOrComplete res =       
         match results with
         | 4999 -> do tcs.TrySetResult(res) |> ignore
-        | _ -> Interlocked.Increment(ref results) |> ignore
+        | _ -> results <- results + 1 
 
     async {
         use! client = getClient "ws://localhost:8080/v1/graphql"

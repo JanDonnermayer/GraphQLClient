@@ -10,6 +10,7 @@ open System.Text
 open System.Threading.Tasks
 open System.Net.WebSockets
 open GraphQLClient.Models.Hasura
+open System.Reactive.Concurrency
 
 
 
@@ -50,9 +51,9 @@ type internal WebSocketClient private (client: ClientWebSocket) =
 
     static member public ConnectAsync (url: string) (protocol: string) (ct: CancellationToken) =
         let client = new ClientWebSocket()
-        client.Options.AddSubProtocol protocol |> ignore
+        client.Options.AddSubProtocol protocol |> ignore        
         async {
-            do! Async.AwaitTask(client.ConnectAsync(Uri(url), ct))
+            do! Async.AwaitTask(client.ConnectAsync(Uri(url), ct))            
             return new WebSocketClient(client)
         }
 
@@ -67,7 +68,11 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
     let receiver = new Subject<HasuraMessage>()
 
     let subscribeReceiver =
-        client.Receiver.Select(byteToMsg).Where(isEmpty >> not).Subscribe(receiver)
+        client
+            .Receiver
+            .Select(byteToMsg)
+            .Where(isEmpty >> not)
+            .Subscribe(receiver)
     let senderSubscribe = sender.Select(msgToByte).Subscribe(client.Sender)
 
     let disposables =
@@ -75,22 +80,16 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
           subscribeReceiver
           senderSubscribe ]
 
-    member public __.Receiver = receiver.AsObservable()
-    member public __.Sender = sender.AsObserver()
-
-    interface IDisposable with
-        member __.Dispose() = disposables |> List.iter (fun x -> x.Dispose())
-
     member private __.HandshakeAsync(ct: CancellationToken) =
         async {
             let cts = TaskCompletionSource<HasuraMessage>()
 
             //Await the connection-acknowledged message
-            use _ = __.Receiver.Where(isConAck).Subscribe(cts.SetResult)
-            __.Sender.OnNext(HasuraMessage.ConInit)
+            use _ = receiver.Where(isConAck).Subscribe(cts.SetResult)
+            sender.OnNext(HasuraMessage.ConInit)
 
             let! res = Async.AwaitTask(Task.WhenAny(cts.Task, Task.Delay(-1, ct)))
-            return if (res.Id = cts.Task.Id) then Ok __
+            return if (res.Id = cts.Task.Id) then Ok __ //self
                    else Error "Didn't receive the connection-acknowledged message!"
         }              
 
@@ -101,7 +100,7 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             let msg = HasuraMessage.Start (id) ("subscription {" + query + "}")   
             let d = new CompositeDisposable(
                         seq {                 
-                            __.Receiver //filter string messages based on id
+                            receiver //filter string messages based on id
                                 .Where(fun s -> s.id.IsSome && s.id.Value = id)               
                                 .Select(stringDataPayload)
                                 .Where(Option.isSome)
@@ -109,10 +108,13 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
                                 .Replay(1)
                                 .RefCount()
                                 .Subscribe observer;
-                            Disposable.Create(fun () -> __.Sender.OnNext(HasuraMessage.Stop id));
+                            Disposable.Create(fun () -> sender.OnNext(HasuraMessage.Stop id));
                         }) :> IDisposable             
-            __.Sender.OnNext msg //send after subscribe
+            sender.OnNext msg //send after subscribe
             d)
+    
+    interface IDisposable with
+        member __.Dispose() = disposables |> List.iter (fun x -> x.Dispose())
 
     static member public ConnectAsync (url: string) (ct: CancellationToken) =
         async {

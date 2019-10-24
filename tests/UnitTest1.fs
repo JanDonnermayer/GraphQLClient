@@ -14,12 +14,10 @@ open System.Threading
 
 open System.Reactive
 open System.Reactive.Linq
+open System.Reactive.Concurrency
+open System.Collections.Immutable
 
 
-type s = {
-    kind : string
-    name : Option<string>
-}
 
 [<SetUp>]
 let Setup() = ()
@@ -35,7 +33,7 @@ let getClient url =
 
 
 
-[<Test>]
+//[<Test>]
 let ``Connect to Hasura and subscribe using Subscribe method``() =
 
     let query = """ worker { name } """
@@ -49,9 +47,39 @@ let ``Connect to Hasura and subscribe using Subscribe method``() =
             (client.Subscribe query) // <-- this is the important part
                 .Do(fun s -> TestContext.Progress.WriteLine(s))
                 .Subscribe(
-                    tcs.TrySetResult >> ignore, //set the query result
+                    ignore,
+                    //tcs.TrySetResult >> ignore, //set the query result
                     (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
 
         let! res = Async.AwaitTask tcs.Task        
+        Assert.IsNotEmpty(res)        
+    } |> Async.RunSynchronously |> ignore
+
+    
+[<Test>]
+let ``Connect to Hasura and subscribe very often``() =
+
+    let query = """ worker { name } """
+
+    let mutable results = 0
+    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(200.0));
+    let incrOrComplete res =       
+        match results with
+        | 4999 -> do tcs.TrySetResult(res) |> ignore
+        | _ -> Interlocked.Increment(ref results) |> ignore
+
+    async {
+        use! client = getClient "ws://localhost:8080/v1/graphql"
+
+        let disp = List.init 5000 (fun s ->
+            (client.Subscribe query) // <-- this is the important part
+                .Subscribe(
+                    incrOrComplete,
+                    //tcs.TrySetResult >> ignore, //set the query result
+                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore))
+                    
+
+        let! res = Async.AwaitTask tcs.Task
+        disp |> List.iter (fun s -> s.Dispose())         
         Assert.IsNotEmpty(res)        
     } |> Async.RunSynchronously |> ignore

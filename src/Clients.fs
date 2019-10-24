@@ -70,6 +70,7 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
     let subscribeReceiver =
         client
             .Receiver
+            .ObserveOn(ThreadPoolScheduler.Instance)
             .Select(byteToMsg)
             .Where(isEmpty >> not)
             .Subscribe(receiver)

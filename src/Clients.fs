@@ -90,9 +90,9 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             sender.OnNext(HasuraMessage.ConInit)
 
             let! res = Async.AwaitTask(Task.WhenAny(cts.Task, Task.Delay(-1, ct)))
-            return if (res.Id = cts.Task.Id) then Ok __ //self
-                   else Error "Didn't receive the connection-acknowledged message!"
-        }              
+            if (res.Id <> cts.Task.Id) then failwith "Didn't receive the connection-acknowledged message!"
+            return __
+        }         
 
     // Get an IObservable<string> emitting results for specified query
     member public __.Subscribe (query: string) =        
@@ -122,8 +122,5 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
             let! innerClient = WebSocketClient.ConnectAsync url "graphql-ws" ct
             let client = new HasuraWebSocketClient(innerClient)
             return! client.HandshakeAsync ct
-        } 
-
-
-
+        } |> Async.StartAsTask
 

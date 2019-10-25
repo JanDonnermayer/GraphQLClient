@@ -20,65 +20,65 @@ open System.Reactive.Concurrency
 
 [<SetUp>]
 let Setup() = ()
-    
+
 
 let getClient url =
-    let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0));
-    async {
-        let! resClient = HasuraWebSocketClient.ConnectAsync url cts.Token         
-        return match resClient with | Ok r -> r |Error e -> failwith(e)
-    }
+    let cts = new CancellationTokenSource(TimeSpan.FromSeconds(20.0))
+    async { return! Async.AwaitTask <| HasuraWebSocketClient.ConnectAsync url cts.Token }
 
 
 
-
-//[<Test>]
+[<Test>]
 let ``Connect to Hasura and subscribe using Subscribe method``() =
 
-    let query = """ worker { name } """
+    let query = """ worker { name colour } """
 
-    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0));
+    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0))
 
+    
     async {
         use! client = getClient "ws://localhost:8080/v1/graphql"
 
         use _ =
             (client.Subscribe query) // <-- this is the important part
                 .Do(fun s -> TestContext.Progress.WriteLine(s))
-                .Subscribe(
-                    ignore,
-                    //tcs.TrySetResult >> ignore, //set the query result
-                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore)
+                .Subscribe(tcs.TrySetResult >> ignore, (fun (ex: Exception) -> tcs.TrySetException ex) >> ignore) //set the query result
 
-        let! res = Async.AwaitTask tcs.Task        
-        Assert.IsNotEmpty(res)        
-    } |> Async.RunSynchronously |> ignore
+        let! res = Async.AwaitTask tcs.Task
+        Assert.IsNotEmpty(res)
+    }
+    |> Async.RunSynchronously
+    |> ignore
 
-    
+
 [<Test>]
 let ``Connect to Hasura and subscribe very often``() =
 
     let query = """ worker { name } """
 
     let mutable results = 0
-    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(200.0));
-    let incrOrComplete res =       
+    let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(200.0))
+
+    let incrOrComplete res =
         match results with
         | 4999 -> do tcs.TrySetResult(res) |> ignore
-        | _ -> results <- results + 1 
+        | _ -> results <- results + 1
 
     async {
         use! client = getClient "ws://localhost:8080/v1/graphql"
 
-        let disp = List.init 5000 (fun s ->
-            (client.Subscribe query) // <-- this is the important part
-                .Subscribe(
-                    incrOrComplete,
-                    //tcs.TrySetResult >> ignore, //set the query result
-                    (fun (ex : Exception) -> tcs.TrySetException ex) >> ignore))
-                    
+        let disp =
+            List.init 5000
+                (fun s ->
+                (client.Subscribe query).Subscribe // <-- this is the important part
+                    (incrOrComplete,
+                     //tcs.TrySetResult >> ignore, //set the query result
+                     (fun (ex: Exception) -> tcs.TrySetException ex) >> ignore))
+
 
         let! res = Async.AwaitTask tcs.Task
-        disp |> List.iter (fun s -> s.Dispose())         
-        Assert.IsNotEmpty(res)        
-    } |> Async.RunSynchronously |> ignore
+        disp |> List.iter (fun s -> s.Dispose())
+        Assert.IsNotEmpty(res)
+    }
+    |> Async.RunSynchronously
+    |> ignore

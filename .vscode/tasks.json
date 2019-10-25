@@ -15,10 +15,24 @@
                 "/consoleloggerparameters:NoSummary"
             ],
             "group": "build",
-            "presentation": {
-                "reveal": "silent"
-            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "pack.home",
+            "command": "dotnet",
+            "type": "shell",
+            "args": [
+                "pack",
+                "-o",
+                "${env:HOMEPATH}/.nuget/packages/graphqlclient",
+                // Ask dotnet build to generate full paths for file names.
+                "/property:GenerateFullPaths=true",
+                // Do not generate summary otherwise it leads to duplicate errors in Problems panel
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "group": "build",
             "problemMatcher": "$msCompile"
         }
+
     ]
 }

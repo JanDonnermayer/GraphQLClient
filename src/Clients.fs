@@ -103,7 +103,7 @@ type HasuraWebSocketClient private (client: WebSocketClient) =
                         seq {                 
                             receiver //filter string messages based on id
                                 .Where(fun s -> s.id.IsSome && s.id.Value = id)               
-                                .Select(stringDataPayload)
+                                .Select(stringDataPayloadOrErrors)
                                 .Where(Option.isSome)
                                 .Select(fun o -> o.Value)
                                 .Replay(1)

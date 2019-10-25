@@ -128,7 +128,7 @@ module Conversion =
               | _ -> HasuraSchema.StringOrPayload()))
 
 
-    let stringDataPayload m =
+    let stringDataPayloadOrErrors m =
         match m.payload with
         | Some p ->
             (match p with

@@ -4,7 +4,16 @@ open FSharp.Data
 
 type HasuraSchema = JsonProvider<"""
 [
-    { "type" : "ka", "id" : "as0", "payload" : { "data" : { } }  },
+    { "type" : "ka", "id" : "as0", "payload" : { "data" : {} }  },
+    { "type" : "ka", "id" : "as0", "payload" : { "errors": [
+        {
+          "extensions": {
+            "path": "$.selectionSet.worker.selectionSet.namer",
+            "code": "validation-failed"
+          },
+          "message": "field \"namer\" not found in type: 'worker'"
+        }
+      ] }  },
     { "type" : "ka", "id" : "" },    
     { "type" : "ka" },    
     { "type" : "ka", "payload" : { "query" : "{ Super_GaphQLData } }" }  },
@@ -22,8 +31,12 @@ type SubscriptionPayload =
 type DataPayload =
     { data: HasuraSchema.Data }
 
+type ErrorPayload =
+    { errors: HasuraSchema.Error [] }
+
 type Payload =
     | D of DataPayload
+    | E of ErrorPayload
     | Q of QueryPayload
     | M of MessagePayload
 
@@ -46,49 +59,56 @@ type HasuraMessage =
         { kind = "connection_init"
           id = None
           payload = None }
-    
+
     //  Start a subscription or query
     static member Start id query =
         { kind = "start"
           id = Some id
-          payload = Some(Q { query = query }) }   
+          payload = Some(Q { query = query }) }
 
-    // Stop as subscription or query      
+    // Stop as subscription or query
     static member Stop id =
         { kind = "stop"
           id = Some id
-          payload = None }   
+          payload = None }
 
 [<AutoOpen>]
 module Conversion =
 
-    let rec dropNullFields = function
+    let rec dropNullFields =
+        function
         | JsonValue.Record flds ->
-            flds 
-            |> Array.choose (fun (k, v) -> 
-              if v = JsonValue.Null then None else
-              Some(k, dropNullFields v) )
+            flds
+            |> Array.choose (fun (k, v) ->
+                if v = JsonValue.Null then None
+                else Some(k, dropNullFields v))
             |> JsonValue.Record
-        | JsonValue.Array arr -> 
-            arr |> Array.map dropNullFields |> JsonValue.Array
+        | JsonValue.Array arr ->
+            arr
+            |> Array.map dropNullFields
+            |> JsonValue.Array
         | json -> json
 
-    let tryValue v = match v with null -> None | _ -> Some v
+    let tryValue v =
+        match v with
+        | null -> None
+        | _ -> Some v
 
     let getPayload (e: HasuraSchema.StringOrPayload) =
         match (e.Record, e.String) with
         | (Some r, _) ->
-            match (r.Data, r.Query) with
-            | (Some d, _) -> Some(D { data = d })
-            | (_, Some q) -> Some(Q { query = q })
+            match (r.Data, r.Errors, r.Query) with
+            | (Some d, _, None) -> Some(D { data = d })
+            | (None, e, None) -> Some(E { errors = e })
+            | (None, _, Some q) -> Some(Q { query = q })
             | _ -> None
         | (_, Some s) -> Some(M s)
         | _ -> None
 
 
     let getHasuraMessage json =
-        ("[" + json  + "]") 
-        |> HasuraSchema.Parse 
+        ("[" + json + "]")
+        |> HasuraSchema.Parse
         |> Array.head
         |> (fun e ->
         { kind = e.Type
@@ -101,18 +121,23 @@ module Conversion =
              (match m.payload with
               | Some p ->
                   match p with
-                  | D d -> HasuraSchema.StringOrPayload(HasuraSchema.Payload(Some d.data, None))
-                  | Q q -> HasuraSchema.StringOrPayload(HasuraSchema.Payload(None, Some q.query))
+                  | D d -> HasuraSchema.StringOrPayload(HasuraSchema.Payload(Some d.data, [||], None))
+                  | E e -> HasuraSchema.StringOrPayload(HasuraSchema.Payload(None, e.errors, None))
+                  | Q q -> HasuraSchema.StringOrPayload(HasuraSchema.Payload(None, [||], Some q.query))
                   | M m -> HasuraSchema.StringOrPayload(m)
               | _ -> HasuraSchema.StringOrPayload()))
-              
-   
+
+
     let stringDataPayload m =
         match m.payload with
         | Some p ->
-            (match p with 
-            | D d -> Some (d.data.JsonValue.ToString (JsonSaveOptions.None))
-            | _ -> None )
+            (match p with
+             | D d -> Some(d.data.JsonValue.ToString(JsonSaveOptions.None))
+             | E e -> Some(e.errors |> Seq.map (fun e -> e.JsonValue.ToString()) |> Seq.reduce (+))
+             | _ -> None)
         | None -> None
 
-    let getJson (m: HasuraMessage) = ((m |> getRoot).JsonValue |> dropNullFields |> (fun v -> v.ToString)) JsonSaveOptions.DisableFormatting
+    let getJson (m: HasuraMessage) =
+        ((m |> getRoot).JsonValue
+         |> dropNullFields
+         |> (fun v -> v.ToString)) JsonSaveOptions.DisableFormatting

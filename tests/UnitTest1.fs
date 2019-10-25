@@ -31,7 +31,7 @@ let getClient url =
 [<Test>]
 let ``Connect to Hasura and subscribe using Subscribe method``() =
 
-    let query = """ worker { name colour } """
+    let query = """ worker { nameee colour } """
 
     let tcs = new TaskCompletionSource<string>(TimeSpan.FromSeconds(20.0))
 
@@ -82,3 +82,8 @@ let ``Connect to Hasura and subscribe very often``() =
     }
     |> Async.RunSynchronously
     |> ignore
+
+
+
+
+    

@@ -133,7 +133,11 @@ module Conversion =
         | Some p ->
             (match p with
              | D d -> Some(d.data.JsonValue.ToString(JsonSaveOptions.None))
-             | E e -> Some(e.errors |> Seq.map (fun e -> e.JsonValue.ToString()) |> Seq.reduce (+))
+             | E e ->
+                 Some
+                     (e.errors
+                      |> Seq.map (fun e -> e.JsonValue.ToString())
+                      |> Seq.reduce (+))
              | _ -> None)
         | None -> None
 

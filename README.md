@@ -1,3 +1,3 @@
 # GraphQLClient
 
-A websocket-based client for Hasura GraphQlEngine
+A websocket-based client for Apollo.
